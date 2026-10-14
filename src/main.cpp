@@ -17,9 +17,11 @@
 #include <string>
 #include <vector>
 
-// Bare Frontier 0.1.5j - Prevent stock weight-editor activation under virtual Nude focus.
-// This is deliberately limited to ChargenMenu's SEPARATE MenuActor.
-// It never equips/unequips on PlayerCharacter, modifies records, or edits save data.
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 VexenDeimos
+// Bare Frontier v0.1.5k release candidate.
+// Changes are deliberately limited to the character editor's separate MenuActor.
+// Player equipment, records, and save data are not modified.
 namespace
 {
     using GFxValue = RE::Scaleform::GFx::Value;
@@ -28,10 +30,9 @@ namespace
     std::atomic_bool g_chargenOpen{ false };
     bool g_nude = false;
     bool g_hover = false;
-    bool g_navFocus = false; // Our row sits between weight and Body Type. Native BodyPage focus remains unchanged until exit.
-    bool g_warnedNativeEdit = false; // Diagnostic: native editor activating under virtual Nude focus.
+    bool g_navFocus = false; // Virtual Nude row; native focus is parked on Body Type while active.
+    bool g_warnedNativeEdit = false; // Safety diagnostic: detect unexpected native edit mode.
     bool g_installed = false;
-    bool g_loggedBodyFrame = false;
     RE::MenuActor* g_changedActor = nullptr;
 
     struct SavedArmor
@@ -174,7 +175,7 @@ namespace
                 REX::WARN("BF/015d: {} has no readable timeline label", name);
             }
             for (const auto& frame : collected.available) {
-                REX::INFO("BF/015d: stock {} timeline available frame '{}'", name, frame);
+                REX::DEBUG("BF/015d: stock {} timeline available frame '{}'", name, frame);
             }
         }
         return ok;
@@ -190,7 +191,7 @@ namespace
         const bool walkStyle = ReleaseStockSelection(body, "LocomotionStepper_mc", diagnostic);
         const bool skinTone = ReleaseStockSelection(body, "SkintoneStepper_mc", diagnostic);
         if (diagnostic) {
-            REX::INFO("BF/015d: SOLO HOVER stock selections cleared: radial={} bodyType={} walkStyle={} skinTone={}",
+            REX::DEBUG("BF/015d: SOLO HOVER stock selections cleared: radial={} bodyType={} walkStyle={} skinTone={}",
                 radial, bodyType, walkStyle, skinTone);
         }
     }
@@ -252,7 +253,7 @@ namespace
                 auto* armor = item.object->As<RE::TESObjectARMO>();
                 if (!armor) continue;
                 const auto mask = armor->bipedModelData.bipedObjectSlots;
-                REX::INFO("BF/015b: equipped preview ARMO {:08X}, mask={:08X}",
+                REX::DEBUG("BF/015b: equipped preview ARMO {:08X}, mask={:08X}",
                     armor->GetFormID(), mask);
                 if ((mask & (1u << 3)) != 0) {
                     eligible.push_back({ armor, item.instanceData });
@@ -271,7 +272,7 @@ namespace
             const bool apiResult = equip->UnequipObject(actor, obj, nullptr,
                 false, false, false, true, nullptr);
             const bool stillEquipped = PreviewWearsArmor(actor, saved.armor);
-            REX::INFO("BF/015b: UnequipObject {:08X} returned={} actuallyEquipped={}",
+            REX::DEBUG("BF/015b: UnequipObject {:08X} returned={} actuallyEquipped={}",
                 saved.armor->GetFormID(), apiResult, stillEquipped);
             if (!stillEquipped) {
                 g_removed.push_back(saved);
@@ -308,25 +309,25 @@ namespace
         std::vector<SavedArmor> unresolved;
         for (const auto& saved : g_removed) {
             if (PreviewWearsArmor(actor, saved.armor)) {
-                REX::INFO("BF/015b: outfit {:08X} already equipped ({})", saved.armor->GetFormID(), reason);
+                REX::DEBUG("BF/015b: outfit {:08X} already equipped ({})", saved.armor->GetFormID(), reason);
                 continue;
             }
             RE::BGSObjectInstance obj{ saved.armor, saved.instanceData.get() };
             const bool apiResult = equip->EquipObject(actor, obj, nullptr,
                 false, false, false, true, false);
             bool equipped = PreviewWearsArmor(actor, saved.armor);
-            REX::INFO("BF/015b: EquipObject {:08X} returned={} actuallyEquipped={} ({})",
+            REX::DEBUG("BF/015b: EquipObject {:08X} returned={} actuallyEquipped={} ({})",
                 saved.armor->GetFormID(), apiResult, equipped, reason);
 
             // Starfield's higher-level equip path may succeed when the direct
             // manager reports success/failure inconsistently on menu actors.
             // Only use it for an outfit already in this SAME preview inventory.
             if (!equipped && PreviewHasItem(actor, saved.armor)) {
-                REX::INFO("BF/015b: trying Actor::EquipItem on existing PREVIEW item {:08X}",
+                REX::DEBUG("BF/015b: trying Actor::EquipItem on existing PREVIEW item {:08X}",
                     saved.armor->GetFormID());
                 actor->EquipItem(saved.armor, false, true);
                 equipped = PreviewWearsArmor(actor, saved.armor);
-                REX::INFO("BF/015b: Actor::EquipItem {:08X} actuallyEquipped={}",
+                REX::DEBUG("BF/015b: Actor::EquipItem {:08X} actuallyEquipped={}",
                     saved.armor->GetFormID(), equipped);
             }
             if (!equipped) unresolved.push_back(saved);
@@ -477,7 +478,7 @@ namespace
                 return;
             }
             SetNudeNavFocus(true);
-            REX::INFO("BF/015j/NAV: entered Nude from {} keyCode={}; native focus parked on BODY TYPE", targetName, keyCode);
+            REX::DEBUG("BF/015j/NAV: entered Nude from {} keyCode={}; native focus parked on BODY TYPE", targetName, keyCode);
             return;
         }
 
@@ -495,7 +496,7 @@ namespace
                 ReleaseNativeHighlights(false);
                 REX::WARN("BF/015j/NAV: native focus unexpectedly returned to WEIGHT; re-parked on BODY TYPE");
             }
-            REX::INFO("BF/015h/NAV: Nude activated by keyCode={}", keyCode);
+            REX::DEBUG("BF/015h/NAV: Nude activated by keyCode={}", keyCode);
             QueueToggle();
             return;
         }
@@ -512,7 +513,7 @@ namespace
         g_navFocus = false;
         g_hover = false;
         UpdateLabel();
-        REX::INFO("BF/015h/NAV: exited Nude to {}", isDown ? "BODY TYPE" : "BODY EDITOR");
+        REX::DEBUG("BF/015h/NAV: exited Nude to {}", isDown ? "BODY TYPE" : "BODY EDITOR");
     }
 
     class UIEventHandler final : public RE::Scaleform::GFx::FunctionHandler
@@ -524,13 +525,13 @@ namespace
             if (!g_chargenOpen.load()) return;
             if (id == 1) {
                 g_navFocus = false;
-                REX::INFO("BF/015: Body-tab nude row CLICK");
+                REX::DEBUG("BF/015: Body-tab nude row CLICK");
                 QueueToggle();
             } else if (id == 2) {
                 // ActionScript can dispatch rollover when labels redraw even without
                 // a physical pointer move. Keep controller focus until mouseMove.
                 if (g_navFocus) {
-                    REX::INFO("BF/015i/NAV: synthetic/stationary rollover did not steal controller focus");
+                    REX::DEBUG("BF/015i/NAV: synthetic/stationary rollover did not steal controller focus");
                     ReleaseNativeHighlights(false);
                 } else {
                     g_hover = true;
@@ -550,7 +551,7 @@ namespace
                 if (g_navFocus) {
                     g_navFocus = false;
                     UpdateLabel();
-                    REX::INFO("BF/015h/NAV: pointer movement released controller focus");
+                    REX::DEBUG("BF/015h/NAV: pointer movement released controller focus");
                 }
             }
         }
@@ -665,30 +666,14 @@ namespace
                                                std::chrono::milliseconds(250))) return;
         last = now;
         if (!g_installed) TryInstallRow();
-        // Diagnostic: confirms the actual Body frame and reports the tab index
-        // WITHOUT using the index for behavior. Logs once per menu opening.
-        if (!g_loggedBodyFrame) {
-            GFxValue root, body, main;
-            if (ResolveUI(root, body, &main) && IsBodyPageActive(main)) {
-                std::int32_t page = -1;
-                const bool gotPage = ReadInt(main, "CurrentPage", page);
-                REX::INFO("BF/015f: BodyPage frame detected; CurrentPage={} readable={} (index ignored)",
-                    page, gotPage);
-                g_loggedBodyFrame = true;
-            }
-        }
         if (g_hover || g_navFocus) {
             ReleaseNativeHighlights(false);
             GFxValue root, body, main;
             if (ResolveUI(root, body, &main)) {
                 if (!IsBodyPageActive(main)) {
-                    // Menu frame changes may temporarily interrupt focus while
-                    // the preview is refreshed; log so we can distinguish from
-                    // native EditMode or pointer focus transitions.
+                    // Release virtual focus when changing to a different tab.
                     if (g_navFocus) {
-                        std::int32_t page = -1;
-                        ReadInt(main, "CurrentPage", page);
-                        REX::INFO("BF/015i/NAV: Nude focus cleared because BodyPage frame inactive (page={})", page);
+                        REX::DEBUG("BF/NAV: virtual Nude focus cleared on tab change");
                     }
                     g_hover = false;
                     g_navFocus = false;
@@ -707,19 +692,9 @@ namespace
                 }
             }
         }
-        // Re-equip before the editor can be destroyed when the user leaves
-        // Body. This supplements the supported MenuOpenCloseEvent fallback.
-        if (g_nude) {
-            GFxValue root, body, main;
-            if (ResolveUI(root, body, &main) && !IsBodyPageActive(main)) {
-                std::int32_t page = -1; // diagnostics only, never used to gate behavior
-                const bool gotPage = ReadInt(main, "CurrentPage", page);
-                REX::INFO("BF/015f: left BodyPage frame (page={}, readable={}); restoring preview clothing",
-                    page, gotPage);
-                RestorePreviewClothing("left-Body-tab");
-                UpdateLabel();
-            }
-        }
+        // Nude preview state persists across Character Creator tabs.
+        // Only explicit NUDE OFF or Character Creator close restores clothing.
+        // Focus styling is cleared separately above on tab changes.
         // Detect the editor generating a replacement preview actor.
         if (g_nude && g_changedActor && GetPreviewActor() != g_changedActor) {
             REX::WARN("BF/015: preview actor replaced; clearing old visual state");
@@ -746,7 +721,6 @@ namespace
                 if (event.opening) {
                     g_chargenOpen.store(true);
                     g_installed = false;
-                    g_loggedBodyFrame = false;
                     g_hover = false;
                     g_navFocus = false;
                     g_warnedNativeEdit = false;
@@ -800,12 +774,12 @@ namespace
 SFSE_PLUGIN_LOAD(const SFSE::LoadInterface* sfse)
 {
     SFSE::Init(sfse);
-    REX::INFO("Bare Frontier v0.1.5j loading - native Accept focus disarm and controller highlight stability");
+    REX::INFO("Bare Frontier v0.1.6 loading - controller focus and reversible preview outfit");
     const auto* messaging = SFSE::GetMessagingInterface();
     if (!messaging || !messaging->RegisterListener(OnSFSEMessage)) {
         REX::ERROR("BF/015: SFSE messaging listener registration failed");
         return false;
     }
-    REX::INFO("Bare Frontier v0.1.5j loaded");
+    REX::INFO("Bare Frontier v0.1.6 loaded");
     return true;
 }
