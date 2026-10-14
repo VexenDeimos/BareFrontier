@@ -1,0 +1,35 @@
+# Third-party dependency: use scripts/Setup-Dependencies.ps1
+/lib/commonlibsf/
+
+# xmake, compiler and IDE output
+/build/
+/.xmake/
+/.vs/
+.vscode/
+*.VC.db
+*.VC.opendb
+*.suo
+*.user
+
+# Compiled binaries and symbol artifacts
+*.dll
+*.pdb
+*.obj
+*.lib
+*.exp
+*.ilk
+*.exe
+
+# Developer-only files
+/backups/
+/logs/
+/diagnostics/
+*.log
+*.zip
+*.7z
+
+# OS/editor leftovers
+.DS_Store
+Thumbs.db
+*.swp
+*~
