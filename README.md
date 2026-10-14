@@ -61,7 +61,7 @@ Open character creation or use `slm 14` at an Enhance-like editor. Enter BODY an
 
 - The plugin's own implementation is in `src/main.cpp`.
 - The project is built using the upstream [CommonLibSF](https://github.com/libxse/commonlibsf) framework. CommonLibSF is cloned separately into the ignored `lib/commonlibsf` directory; it is not bundled in this repository.
-- `xmake.lua` follows the original project template and declares `GPL-3.0`. Before public publication, confirm the intended distribution license and add its corresponding LICENSE file.
+- Bare Frontier is licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See [LICENSE](LICENSE). The build configuration also declares `GPL-3.0`.
 - The helper scripts are for building/publishing the source, **not** required by players to run the plugin.
 
 ## Publishing
