@@ -16,10 +16,18 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <array>
+#include <filesystem>
+#include <Windows.h>
+// Windows.h defines ERROR as a macro, which collides with REX::ERROR(...).
+// Keep the Windows INI APIs while preserving the existing REX logging calls.
+#ifdef ERROR
+#undef ERROR
+#endif
 
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (c) 2026 VexenDeimos
-// Bare Frontier v0.1.5k release candidate.
+// Bare Frontier v0.1.7-rc3 release candidate.
 // Changes are deliberately limited to the character editor's separate MenuActor.
 // Player equipment, records, and save data are not modified.
 namespace
@@ -33,6 +41,8 @@ namespace
     bool g_navFocus = false; // Virtual Nude row; native focus is parked on Body Type while active.
     bool g_warnedNativeEdit = false; // Safety diagnostic: detect unexpected native edit mode.
     bool g_installed = false;
+    bool g_autoNudePending = false; // One-shot, per Character Creator session.
+    Clock::time_point g_chargenOpenedAt{};
     RE::MenuActor* g_changedActor = nullptr;
 
     struct SavedArmor
@@ -41,6 +51,23 @@ namespace
         RE::BSTSmartPointer<RE::TBO_InstanceData> instanceData;
     };
     std::vector<SavedArmor> g_removed;
+
+    // The INI is optional. Missing/invalid value means the original OFF default.
+    // Resolve from Starfield.exe rather than relying on process working directory.
+    bool ReadAutoNudePreference()
+    {
+        std::array<wchar_t, 32768> executablePath{};
+        const auto n = ::GetModuleFileNameW(nullptr, executablePath.data(),
+            static_cast<DWORD>(executablePath.size()));
+        if (n == 0 || n >= executablePath.size()) {
+            REX::WARN("BF/CONFIG: cannot resolve Starfield path; defaulting NUDE to OFF");
+            return false;
+        }
+        const auto ini = std::filesystem::path(executablePath.data()).parent_path() /
+            L"Data" / L"SFSE" / L"Plugins" / L"BareFrontier.ini";
+        return ::GetPrivateProfileIntW(L"General", L"NudeOnByDefault", 0,
+            ini.c_str()) == 1;
+    }
 
     bool ReadInt(const GFxValue& obj, const char* name, std::int32_t& out)
     {
@@ -365,6 +392,7 @@ namespace
 
     void QueueToggle()
     {
+        g_autoNudePending = false; // A user action must never be undone by the startup preference.
         if (auto* tasks = SFSE::GetTaskInterface()) {
             tasks->AddTask([] { TogglePreview(); });
         } else {
@@ -662,10 +690,61 @@ namespace
         const auto now = Clock::now();
         // Stock ActionScript sometimes reasserts an old selection during
         // equip/unequip. Refresh focus styling promptly for hover AND controller.
-        if (now - last < ((g_hover || g_navFocus) ? std::chrono::milliseconds(75) :
-                                               std::chrono::milliseconds(250))) return;
+        // The default-on preference must act as soon as the preview outfit
+        // is initialized, before it appears as a visible clothing flash.
+        // Keep the original slower UI refresh cadence afterward.
+        const auto pollInterval = g_autoNudePending ? std::chrono::milliseconds(16) :
+            ((g_hover || g_navFocus) ? std::chrono::milliseconds(75) :
+                                     std::chrono::milliseconds(250));
+        if (now - last < pollInterval) return;
         last = now;
         if (!g_installed) TryInstallRow();
+        // The outfit is attached to the preview MenuActor, not the BODY tab.
+        // Check that actor's equipped clothing directly so configured NUDE can
+        // apply on the first tab, before the user ever navigates to BODY.
+        if (g_autoNudePending && g_installed) {
+            if (g_nude) {
+                g_autoNudePending = false;
+            } else {
+                auto* actor = GetPreviewActor();
+                std::uint32_t eligibleOutfits = 0;
+                if (IsSafePreview(actor)) {
+                    {
+                        const auto guard = actor->inventoryList.LockRead();
+                        auto* inventory = *guard;
+                        if (inventory) {
+                            for (const auto& item : inventory->data) {
+                                if (!item.object || !item.IsEquipped()) continue;
+                                auto* armor = item.object->As<RE::TESObjectARMO>();
+                                if (!armor) continue;
+                                if ((armor->bipedModelData.bipedObjectSlots & (1u << 3)) != 0) {
+                                    ++eligibleOutfits;
+                                    if (eligibleOutfits > 4) break;
+                                }
+                            }
+                        }
+                    } // Release inventory read lock before unequipping anything.
+                    if (eligibleOutfits >= 1 && eligibleOutfits <= 4) {
+                        // Only one removal attempt. Manual user actions always
+                        // cancel pending startup behavior via QueueToggle().
+                        g_autoNudePending = false;
+                        REX::INFO("BF/CONFIG: applying default NUDE to ready preview after {}ms",
+                            std::chrono::duration_cast<std::chrono::milliseconds>(now - g_chargenOpenedAt).count());
+                        g_nude = RemovePreviewBodyClothing();
+                        UpdateLabel();
+                        REX::INFO("BF/CONFIG: initial nude preview actuallyEnabled={}", g_nude);
+                    }
+                }
+                // NG+ can already be nude; never spam removal attempts when
+                // there is no outfit, and never surprise the user much later.
+                if (g_autoNudePending &&
+                    now - g_chargenOpenedAt >= std::chrono::seconds(12)) {
+                    g_autoNudePending = false;
+                    REX::INFO("BF/CONFIG: default NUDE skipped; preview ready={} eligible outfit count={}",
+                        IsSafePreview(actor), eligibleOutfits);
+                }
+            }
+        }
         if (g_hover || g_navFocus) {
             ReleaseNativeHighlights(false);
             GFxValue root, body, main;
@@ -727,6 +806,10 @@ namespace
                     g_nude = false;
                     g_removed.clear();
                     g_changedActor = nullptr;
+                    g_chargenOpenedAt = Clock::now();
+                    g_autoNudePending = ReadAutoNudePreference();
+                    REX::INFO("BF/CONFIG: NudeOnByDefault={} for this Character Creator session",
+                        g_autoNudePending ? 1 : 0);
                     REX::INFO("BF/015: Chargen OPEN - automatic clickable row pending");
                 } else {
                     // Supported menu lifecycle fallback, if the preview is
@@ -743,6 +826,7 @@ namespace
                     g_navFocus = false;
                     g_warnedNativeEdit = false;
                     g_installed = false;
+                    g_autoNudePending = false;
                     REX::INFO("BF/015: Chargen CLOSED; state reset, player unchanged");
                 }
             }
@@ -774,12 +858,12 @@ namespace
 SFSE_PLUGIN_LOAD(const SFSE::LoadInterface* sfse)
 {
     SFSE::Init(sfse);
-    REX::INFO("Bare Frontier v0.1.6 loading - controller focus and reversible preview outfit");
+    REX::INFO("Bare Frontier v0.1.7-rc3 loading - controller focus and reversible preview outfit");
     const auto* messaging = SFSE::GetMessagingInterface();
     if (!messaging || !messaging->RegisterListener(OnSFSEMessage)) {
         REX::ERROR("BF/015: SFSE messaging listener registration failed");
         return false;
     }
-    REX::INFO("Bare Frontier v0.1.6 loaded");
+    REX::INFO("Bare Frontier v0.1.7-rc3 loaded");
     return true;
 }

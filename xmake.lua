@@ -3,7 +3,7 @@ includes("lib/commonlibsf")
 
 -- project
 set_project("BareFrontier")
-set_version("0.1.6")
+set_version("0.1.7")
 set_license("GPL-3.0")
 set_languages("c++23")
 set_warnings("allextra")
