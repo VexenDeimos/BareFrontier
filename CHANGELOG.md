@@ -6,6 +6,7 @@
 - When enabled, NUDE automatically activates as soon as the Character Creator preview outfit is ready, even if BODY is not the active tab.
 - Removed the fixed startup delay in favor of faster readiness checks to minimize visible clothing flashes.
 - Preserved manual ON/OFF, tab persistence, controller support, and the separate-preview-actor safeguards.
+- Community suggestion: [gluonman](https://next.nexusmods.com/profile/gluonman) on Nexus Mods proposed the optional automatic NUDE-on-open feature.
 
 ## v0.1.6
 

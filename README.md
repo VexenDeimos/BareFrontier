@@ -49,6 +49,7 @@ The v0.1.7 RC3 build was tested in-game with a DualSense, repeated editor openin
 
 ## Credits
 
+- **Feature idea:** [gluonman](https://next.nexusmods.com/profile/gluonman) on Nexus Mods suggested the optional automatic NUDE-on-open setting added in v0.1.7.
 - [CommonLibSF](https://github.com/libxse/commonlibsf) contributors
 - [Starfield Script Extender (SFSE)](https://sfse.silverlock.org/) developers
 - [Address Library for SFSE Plugins](https://www.nexusmods.com/starfield/mods/3256) by meh321
